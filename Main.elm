@@ -7,6 +7,7 @@ import Html.Attributes exposing (..)
 import Char
 import String
 import Dict exposing (Dict)
+import List.Zipper as Zipper exposing (Zipper)
 
 
 main : Program Never
@@ -19,8 +20,7 @@ main =
 
 
 type alias Model =
-    { rainbow : List ( Char, String )
-    , highlightedIndex : Int
+    { rainbow : Zipper ( Char, String )
     , resetDropdown : Bool
     }
 
@@ -36,7 +36,8 @@ init =
         , ( 'I', "???" )
         , ( 'V', "???" )
         ]
-    , highlightedIndex = 0
+            |> Zipper.fromList
+            |> Zipper.withDefault ( '?', "?" )
     , resetDropdown = True
     }
 
@@ -69,28 +70,23 @@ update msg model =
     case msg of
         ChangeColor newColor ->
             let
-                updateAtIndex index ( letter, color ) =
-                    ( letter
-                    , if index == model.highlightedIndex then
-                        newColor
-                      else
-                        color
-                    )
+                changeColor ( letter, color ) =
+                    ( letter, newColor )
             in
                 { model
-                    | rainbow = List.indexedMap updateAtIndex model.rainbow
+                    | rainbow = Zipper.update changeColor model.rainbow
                     , resetDropdown = False
                 }
 
         Next ->
             { model
-                | highlightedIndex = model.highlightedIndex + 1
+                | rainbow = Zipper.next model.rainbow |> Maybe.withDefault model.rainbow
                 , resetDropdown = True
             }
 
         Prev ->
             { model
-                | highlightedIndex = model.highlightedIndex - 1
+                | rainbow = Zipper.previous model.rainbow |> Maybe.withDefault model.rainbow
                 , resetDropdown = True
             }
 
@@ -103,7 +99,10 @@ view : Model -> Html Msg
 view model =
     div []
         [ h1 [ row ] [ text "Rainbow!" ]
-        , div [ row ] <| List.indexedMap (colorTile model.highlightedIndex) model.rainbow
+        , div [ row ]
+            <| (Zipper.before model.rainbow |> List.map (colorTile False))
+            ++ [ Zipper.current model.rainbow |> colorTile True ]
+            ++ (Zipper.after model.rainbow |> List.map (colorTile False))
         , div [ row ]
             [ button [ buttonStyles, onClick Prev ] [ text "Left" ]
             , colorSelector model.resetDropdown
@@ -112,8 +111,8 @@ view model =
         ]
 
 
-colorTile : Int -> Int -> ( Char, String ) -> Html Msg
-colorTile highlightedIndex index ( letter, color ) =
+colorTile : Bool -> ( Char, String ) -> Html Msg
+colorTile highlighted ( letter, color ) =
     let
         getColor color =
             Dict.get color rainbowColors
@@ -122,7 +121,7 @@ colorTile highlightedIndex index ( letter, color ) =
         div
             [ colorStyles
                 <| ( "background", getColor color )
-                :: if index == highlightedIndex then
+                :: if highlighted then
                     [ ( "border", "7px solid orange" ) ]
                    else
                     []
